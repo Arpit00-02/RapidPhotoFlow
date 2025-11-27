@@ -3,7 +3,7 @@ import { getDonePhotos, deletePhotos, initDatabase } from "@/lib/db";
 
 export async function GET() {
   try {
-    await initDatabase();
+    // No need to call initDatabase() - Prisma Client handles connections automatically
     const photos = await getDonePhotos();
     return NextResponse.json(photos);
   } catch (error) {
@@ -17,7 +17,7 @@ export async function GET() {
 
 export async function DELETE(request: NextRequest) {
   try {
-    await initDatabase();
+    // No need to call initDatabase() - Prisma Client handles connections automatically
     const { ids } = await request.json();
     if (!Array.isArray(ids)) {
       return NextResponse.json({ error: "Invalid request" }, { status: 400 });

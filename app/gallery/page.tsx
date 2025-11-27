@@ -19,33 +19,51 @@ export default function GalleryPage() {
   const { toast } = useToast();
 
   useEffect(() => {
-    const fetchPhotos = () => {
-      fetch("/api/gallery")
-        .then((res) => res.json())
-        .then((data) => {
-          setPhotos((prevPhotos) => {
-            const prevAllDone = prevPhotos.length > 0 && prevPhotos.every((p) => p.status === "done");
-            const currentAllDone = data.length > 0 && data.every((p: Photo) => p.status === "done");
-            
-            // Trigger confetti only when transitioning to all done state
-            if (!confettiTriggered.current && !prevAllDone && currentAllDone) {
-              confettiTriggered.current = true;
-              setTimeout(() => {
-                confetti({
-                  particleCount: 100,
-                  spread: 70,
-                  origin: { y: 0.6 },
-                });
-              }, 500);
-            }
-            
-            return data;
-          });
+    const fetchPhotos = async () => {
+      try {
+        const res = await fetch("/api/gallery");
+        const data = await res.json();
+        
+        setPhotos((prevPhotos) => {
+          const prevAllDone = prevPhotos.length > 0 && prevPhotos.every((p) => p.status === "done");
+          const currentAllDone = data.length > 0 && data.every((p: Photo) => p.status === "done");
+          
+          // Trigger confetti only when transitioning to all done state
+          if (!confettiTriggered.current && !prevAllDone && currentAllDone) {
+            confettiTriggered.current = true;
+            setTimeout(() => {
+              confetti({
+                particleCount: 100,
+                spread: 70,
+                origin: { y: 0.6 },
+              });
+            }, 500);
+          }
+          
+          return data;
         });
+      } catch (error) {
+        console.error("Error fetching photos:", error);
+      }
     };
 
+    // Initial fetch
     fetchPhotos();
-    const interval = setInterval(fetchPhotos, 2000);
+
+    // Only poll if we need to check for new processed photos
+    // Poll every 5 seconds (reduced from 2 seconds)
+    // Stop polling after 2 minutes to save resources
+    let pollCount = 0;
+    const maxPolls = 24; // 2 minutes at 5 second intervals
+    
+    const interval = setInterval(() => {
+      pollCount++;
+      if (pollCount >= maxPolls) {
+        clearInterval(interval);
+        return;
+      }
+      fetchPhotos();
+    }, 5000); // Poll every 5 seconds instead of 2
 
     return () => clearInterval(interval);
   }, []);
@@ -68,24 +86,6 @@ export default function GalleryPage() {
     } else {
       setSelected(new Set(photos.map((p) => p.id)));
     }
-  };
-
-  const handleBulkApprove = async () => {
-    if (selected.size === 0) return;
-    toast({
-      title: "Photos approved",
-      description: `${selected.size} photo(s) have been approved.`,
-    });
-    setSelected(new Set());
-  };
-
-  const handleBulkReject = async () => {
-    if (selected.size === 0) return;
-    toast({
-      title: "Photos rejected",
-      description: `${selected.size} photo(s) have been rejected.`,
-    });
-    setSelected(new Set());
   };
 
   const handleBulkDownload = async () => {
@@ -164,24 +164,6 @@ export default function GalleryPage() {
                 className="mr-2"
               >
                 {selected.size === photos.length ? "Deselect All" : "Select All"}
-              </Button>
-              <Button
-                variant="default"
-                size="sm"
-                onClick={handleBulkApprove}
-                className="gap-2"
-              >
-                <CheckCircle2 className="h-4 w-4" />
-                Approve ({selected.size})
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleBulkReject}
-                className="gap-2"
-              >
-                <XCircle className="h-4 w-4" />
-                Reject ({selected.size})
               </Button>
               <Button
                 variant="outline"

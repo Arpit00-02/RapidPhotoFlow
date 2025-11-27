@@ -1,4 +1,4 @@
-import { sql } from "@vercel/postgres";
+import { prisma } from "./prisma";
 
 export interface Photo {
   id: string;
@@ -14,21 +14,11 @@ export interface Photo {
 
 export async function initDatabase() {
   try {
-    await sql`
-      CREATE TABLE IF NOT EXISTS photos (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        url TEXT NOT NULL,
-        status TEXT NOT NULL DEFAULT 'queued',
-        progress INTEGER NOT NULL DEFAULT 0,
-        uploaded_at TIMESTAMP NOT NULL DEFAULT NOW(),
-        processed_at TIMESTAMP,
-        error TEXT,
-        logs JSONB DEFAULT '[]'::jsonb
-      )
-    `;
+    // Prisma will create the table automatically when we push the schema
+    await prisma.$connect();
   } catch (error) {
     console.error("Database initialization error:", error);
+    throw error;
   }
 }
 
@@ -37,43 +27,97 @@ export async function createPhoto(
   name: string,
   url: string
 ): Promise<void> {
-  await sql`
-    INSERT INTO photos (id, name, url, status, progress, logs)
-    VALUES (${id}, ${name}, ${url}, 'queued', 0, '[]'::jsonb)
-  `;
+  await prisma.photo.create({
+    data: {
+      id,
+      name,
+      url,
+      status: "queued",
+      progress: 0,
+      logs: [],
+    },
+  });
 }
 
 export async function getPhoto(id: string): Promise<Photo | null> {
-  const result = await sql`
-    SELECT * FROM photos WHERE id = ${id}
-  `;
-  if (result.rows.length === 0) return null;
-  return result.rows[0] as Photo;
+  const photo = await prisma.photo.findUnique({
+    where: { id },
+  });
+  if (!photo) return null;
+  
+  return {
+    id: photo.id,
+    name: photo.name,
+    url: photo.url,
+    status: photo.status as Photo["status"],
+    progress: photo.progress,
+    uploaded_at: photo.uploaded_at.toISOString(),
+    processed_at: photo.processed_at?.toISOString() || null,
+    error: photo.error,
+    logs: (photo.logs as any) || [],
+  };
 }
 
 export async function getAllPhotos(): Promise<Photo[]> {
-  const result = await sql`
-    SELECT * FROM photos ORDER BY uploaded_at DESC
-  `;
-  return result.rows as Photo[];
+  const photos = await prisma.photo.findMany({
+    orderBy: { uploaded_at: "desc" },
+  });
+  
+  return photos.map((photo) => ({
+    id: photo.id,
+    name: photo.name,
+    url: photo.url,
+    status: photo.status as Photo["status"],
+    progress: photo.progress,
+    uploaded_at: photo.uploaded_at.toISOString(),
+    processed_at: photo.processed_at?.toISOString() || null,
+    error: photo.error,
+    logs: (photo.logs as any) || [],
+  }));
 }
 
 export async function getProcessingPhotos(): Promise<Photo[]> {
-  const result = await sql`
-    SELECT * FROM photos 
-    WHERE status IN ('queued', 'processing')
-    ORDER BY uploaded_at ASC
-  `;
-  return result.rows as Photo[];
+  const photos = await prisma.photo.findMany({
+    where: {
+      status: {
+        in: ["queued", "processing"],
+      },
+    },
+    orderBy: { uploaded_at: "asc" },
+  });
+  
+  return photos.map((photo) => ({
+    id: photo.id,
+    name: photo.name,
+    url: photo.url,
+    status: photo.status as Photo["status"],
+    progress: photo.progress,
+    uploaded_at: photo.uploaded_at.toISOString(),
+    processed_at: photo.processed_at?.toISOString() || null,
+    error: photo.error,
+    logs: (photo.logs as any) || [],
+  }));
 }
 
 export async function getDonePhotos(): Promise<Photo[]> {
-  const result = await sql`
-    SELECT * FROM photos 
-    WHERE status = 'done'
-    ORDER BY processed_at DESC
-  `;
-  return result.rows as Photo[];
+  const photos = await prisma.photo.findMany({
+    where: {
+      status: "done",
+    },
+    orderBy: { processed_at: "desc" },
+  });
+  
+  return photos.map((photo) => ({
+    id: photo.id,
+    name: photo.name,
+    url: photo.url,
+    status: photo.status as Photo["status"],
+    progress: photo.progress,
+    uploaded_at: photo.uploaded_at.toISOString(),
+    processed_at: photo.processed_at?.toISOString() || null,
+    error: photo.error,
+    logs: (photo.logs as any) || [],
+  }));
 }
 
 export async function updatePhoto(
@@ -86,28 +130,37 @@ export async function updatePhoto(
     logs: Array<{ timestamp: string; message: string }>;
   }>
 ): Promise<void> {
+  const data: any = {};
+  
   if (updates.status !== undefined) {
-    await sql`UPDATE photos SET status = ${updates.status} WHERE id = ${id}`;
+    data.status = updates.status;
   }
   if (updates.progress !== undefined) {
-    await sql`UPDATE photos SET progress = ${updates.progress} WHERE id = ${id}`;
+    data.progress = updates.progress;
   }
   if (updates.processed_at !== undefined) {
-    await sql`UPDATE photos SET processed_at = ${updates.processed_at} WHERE id = ${id}`;
+    data.processed_at = updates.processed_at ? new Date(updates.processed_at) : null;
   }
   if (updates.error !== undefined) {
-    await sql`UPDATE photos SET error = ${updates.error} WHERE id = ${id}`;
+    data.error = updates.error;
   }
   if (updates.logs !== undefined) {
-    await sql`UPDATE photos SET logs = ${JSON.stringify(updates.logs)}::jsonb WHERE id = ${id}`;
+    data.logs = updates.logs;
   }
+  
+  await prisma.photo.update({
+    where: { id },
+    data,
+  });
 }
 
 export async function deletePhotos(ids: string[]): Promise<void> {
   if (ids.length === 0) return;
-  // Delete one by one to avoid SQL injection issues with arrays
-  for (const id of ids) {
-    await sql`DELETE FROM photos WHERE id = ${id}`;
-  }
+  await prisma.photo.deleteMany({
+    where: {
+      id: {
+        in: ids,
+      },
+    },
+  });
 }
-
