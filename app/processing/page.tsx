@@ -96,27 +96,33 @@ export default function ProcessingPage() {
   if (photos.length === 0) {
     return (
       <div className="min-h-screen bg-background">
+        <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:rounded-md">
+          Skip to main content
+        </a>
         <Nav />
-        <div className="container mx-auto px-4 py-12">
+        <main id="main-content" className="container mx-auto px-4 sm:px-6 py-6 sm:py-12">
           <Card>
-            <CardContent className="p-12 text-center">
-              <p className="text-muted-foreground">
+            <CardContent className="p-6 sm:p-12 text-center">
+              <p className="text-sm sm:text-base text-muted-foreground">
                 No photos in the processing queue. Upload some photos to get started!
               </p>
             </CardContent>
           </Card>
-        </div>
+        </main>
       </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-background">
+      <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:rounded-md">
+        Skip to main content
+      </a>
       <Nav />
-      <div className="container mx-auto px-4 py-12">
+      <main id="main-content" className="container mx-auto px-4 sm:px-6 py-6 sm:py-12">
         <div className="mb-6">
-          <h1 className="text-3xl font-bold mb-2">Processing Queue</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl sm:text-3xl font-bold mb-2">Processing Queue</h1>
+          <p className="text-sm sm:text-base text-muted-foreground">
             {photos.length} photo{photos.length !== 1 ? "s" : ""} in queue
           </p>
         </div>
@@ -124,24 +130,27 @@ export default function ProcessingPage() {
         <div className="space-y-4">
           {photos.map((photo) => (
             <Card key={photo.id}>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4 flex-1 min-w-0">
-                    <div className="relative w-16 h-16 rounded-lg overflow-hidden flex-shrink-0">
+              <CardHeader className="p-4 sm:p-6">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
+                    <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-lg overflow-hidden flex-shrink-0">
                       <Image
                         src={photo.url}
-                        alt={photo.name}
+                        alt={`Thumbnail of ${photo.name}`}
                         fill
+                        sizes="64px"
                         className="object-cover"
+                        loading="lazy"
+                        quality={75}
                       />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <CardTitle className="text-lg truncate">
+                      <CardTitle className="text-base sm:text-lg truncate">
                         {photo.name}
                       </CardTitle>
-                      <div className="flex items-center gap-2 mt-1">
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
                         {getStatusBadge(photo.status)}
-                        <span className="text-sm text-muted-foreground">
+                        <span className="text-xs sm:text-sm text-muted-foreground">
                           {photo.progress}%
                         </span>
                       </div>
@@ -150,26 +159,38 @@ export default function ProcessingPage() {
                   <Button
                     variant="ghost"
                     size="icon"
+                    className="min-h-[44px] min-w-[44px] flex-shrink-0"
                     onClick={() => toggleExpand(photo.id)}
+                    aria-label={expanded.has(photo.id) ? `Collapse details for ${photo.name}` : `Expand details for ${photo.name}`}
+                    aria-expanded={expanded.has(photo.id)}
                   >
                     {expanded.has(photo.id) ? (
-                      <ChevronUp className="h-4 w-4" />
+                      <ChevronUp className="h-5 w-5" aria-hidden="true" />
                     ) : (
-                      <ChevronDown className="h-4 w-4" />
+                      <ChevronDown className="h-5 w-5" aria-hidden="true" />
                     )}
                   </Button>
                 </div>
               </CardHeader>
-              <CardContent>
+              <CardContent className="p-4 sm:p-6 pt-0">
                 <div className="space-y-4">
                   <div>
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium">Progress</span>
-                      <span className="text-sm text-muted-foreground">
+                      <span className="text-sm sm:text-base font-medium" id={`progress-label-${photo.id}`}>
+                        Progress
+                      </span>
+                      <span className="text-sm sm:text-base text-muted-foreground" aria-live="polite" aria-atomic="true">
                         {photo.progress}%
                       </span>
                     </div>
-                    <Progress value={photo.progress} />
+                    <Progress 
+                      value={photo.progress} 
+                      className="h-2 sm:h-2.5" 
+                      aria-labelledby={`progress-label-${photo.id}`}
+                      aria-valuenow={photo.progress}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                    />
                   </div>
 
                   {expanded.has(photo.id) && (
@@ -208,6 +229,9 @@ export default function ProcessingPage() {
             </Card>
           ))}
         </div>
+      </main>
+      <div aria-live="polite" aria-atomic="true" className="sr-only">
+        {photos.length > 0 && `${photos.length} photo${photos.length !== 1 ? "s" : ""} in processing queue`}
       </div>
     </div>
   );

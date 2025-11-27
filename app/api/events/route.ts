@@ -7,11 +7,42 @@ export async function GET(request: NextRequest) {
 
   const stream = new ReadableStream({
     async start(controller) {
-      const send = (data: any) => {
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+      let isClosed = false;
+      let interval: NodeJS.Timeout | null = null;
+
+      const close = () => {
+        if (isClosed) return;
+        isClosed = true;
+        if (interval) {
+          clearInterval(interval);
+          interval = null;
+        }
+        try {
+          controller.close();
+        } catch (error) {
+          // Controller might already be closed, ignore
+        }
       };
 
-      const interval = setInterval(async () => {
+      const send = (data: any) => {
+        if (isClosed) return;
+        try {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+        } catch (error) {
+          // Controller might be closed, cleanup
+          close();
+        }
+      };
+
+      interval = setInterval(async () => {
+        if (isClosed) {
+          if (interval) {
+            clearInterval(interval);
+            interval = null;
+          }
+          return;
+        }
+
         try {
           // Process photos
           const photos = await getProcessingPhotos();
@@ -28,8 +59,7 @@ export async function GET(request: NextRequest) {
           send({ type: "update", photos: updatedPhotos });
         } catch (error) {
           console.error("SSE error:", error);
-          clearInterval(interval);
-          controller.close();
+          close();
         }
       }, 1000);
 
@@ -39,12 +69,12 @@ export async function GET(request: NextRequest) {
         send({ type: "update", photos });
       } catch (error) {
         console.error("SSE initial error:", error);
+        close();
       }
 
       // Cleanup on close
       request.signal.addEventListener("abort", () => {
-        clearInterval(interval);
-        controller.close();
+        close();
       });
     },
   });

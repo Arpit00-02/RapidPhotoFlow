@@ -8,7 +8,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Download, CheckCircle2, XCircle, Trash2 } from "lucide-react";
 import Image from "next/image";
-import confetti from "canvas-confetti";
 import type { Photo } from "@/lib/db";
 import { useToast } from "@/hooks/use-toast";
 
@@ -19,10 +18,17 @@ export default function GalleryPage() {
   const { toast } = useToast();
 
   useEffect(() => {
+    let isMounted = true;
+    
     const fetchPhotos = async () => {
       try {
-        const res = await fetch("/api/gallery");
+        const res = await fetch("/api/gallery", {
+          cache: "no-store",
+        });
+        if (!res.ok) return;
+        
         const data = await res.json();
+        if (!isMounted) return;
         
         setPhotos((prevPhotos) => {
           const prevAllDone = prevPhotos.length > 0 && prevPhotos.every((p) => p.status === "done");
@@ -31,8 +37,9 @@ export default function GalleryPage() {
           // Trigger confetti only when transitioning to all done state
           if (!confettiTriggered.current && !prevAllDone && currentAllDone) {
             confettiTriggered.current = true;
-            setTimeout(() => {
-              confetti({
+            setTimeout(async () => {
+              const confettiFn = await import("canvas-confetti").then((mod) => mod.default);
+              confettiFn({
                 particleCount: 100,
                 spread: 70,
                 origin: { y: 0.6 },
@@ -57,6 +64,10 @@ export default function GalleryPage() {
     const maxPolls = 24; // 2 minutes at 5 second intervals
     
     const interval = setInterval(() => {
+      if (!isMounted) {
+        clearInterval(interval);
+        return;
+      }
       pollCount++;
       if (pollCount >= maxPolls) {
         clearInterval(interval);
@@ -65,7 +76,10 @@ export default function GalleryPage() {
       fetchPhotos();
     }, 5000); // Poll every 5 seconds instead of 2
 
-    return () => clearInterval(interval);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
   }, []);
 
   const toggleSelect = (id: string) => {
@@ -114,10 +128,11 @@ export default function GalleryPage() {
       });
       setPhotos((prev) => prev.filter((p) => !selected.has(p.id)));
       setSelected(new Set());
-      toast({
-        title: "Photos deleted",
-        description: `${ids.length} photo(s) have been deleted.`,
-      });
+    toast({
+      title: "Photos deleted",
+      description: `${ids.length} photo(s) have been deleted.`,
+      variant: "success",
+    });
     } catch (error) {
       toast({
         title: "Error",
@@ -146,90 +161,114 @@ export default function GalleryPage() {
 
   return (
     <div className="min-h-screen bg-background">
+      <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:rounded-md">
+        Skip to main content
+      </a>
       <Nav />
-      <div className="container mx-auto px-4 py-12">
-        <div className="mb-6 flex items-center justify-between flex-wrap gap-4">
+      <main id="main-content" className="container mx-auto px-4 sm:px-6 py-6 sm:py-12">
+        <div className="mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold mb-2">Gallery</h1>
-            <p className="text-muted-foreground">
+            <h1 className="text-2xl sm:text-3xl font-bold mb-2">Gallery</h1>
+            <p className="text-sm sm:text-base text-muted-foreground">
               {photos.length} processed photo{photos.length !== 1 ? "s" : ""}
             </p>
           </div>
           {selected.size > 0 && (
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-2 sm:gap-3 flex-wrap w-full sm:w-auto">
               <Button
                 variant="outline"
-                size="sm"
+                size="default"
                 onClick={selectAll}
-                className="mr-2"
+                aria-label={selected.size === photos.length ? "Deselect all photos" : "Select all photos"}
+                className="min-h-[44px] flex-1 sm:flex-initial text-sm sm:text-base"
               >
                 {selected.size === photos.length ? "Deselect All" : "Select All"}
               </Button>
               <Button
                 variant="outline"
-                size="sm"
+                size="default"
                 onClick={handleBulkDownload}
-                className="gap-2"
+                aria-label={`Download ${selected.size} selected photo${selected.size !== 1 ? "s" : ""}`}
+                className="gap-2 min-h-[44px] flex-1 sm:flex-initial text-sm sm:text-base"
               >
-                <Download className="h-4 w-4" />
-                Download ({selected.size})
+                <Download className="h-4 w-4 sm:h-5 sm:w-5" aria-hidden="true" />
+                <span className="hidden xs:inline">Download</span>
+                <span className="xs:hidden">({selected.size})</span>
               </Button>
               <Button
                 variant="destructive"
-                size="sm"
+                size="default"
                 onClick={handleBulkDelete}
-                className="gap-2"
+                aria-label={`Delete ${selected.size} selected photo${selected.size !== 1 ? "s" : ""}`}
+                className="gap-2 min-h-[44px] flex-1 sm:flex-initial text-sm sm:text-base"
               >
-                <Trash2 className="h-4 w-4" />
-                Delete ({selected.size})
+                <Trash2 className="h-4 w-4 sm:h-5 sm:w-5" aria-hidden="true" />
+                <span className="hidden xs:inline">Delete</span>
+                <span className="xs:hidden">({selected.size})</span>
               </Button>
             </div>
           )}
         </div>
 
-        <div className="columns-1 sm:columns-2 md:columns-3 lg:columns-4 gap-4">
-          {photos.map((photo) => (
+        <div className="columns-1 sm:columns-2 md:columns-3 lg:columns-4 gap-3 sm:gap-4">
+          {photos.map((photo, index) => (
             <Card
               key={photo.id}
-              className={`mb-4 break-inside-avoid cursor-pointer transition-all hover:shadow-lg ${
+              role="button"
+              tabIndex={0}
+              aria-label={`Select photo ${photo.name}`}
+              aria-pressed={selected.has(photo.id)}
+              className={`mb-3 sm:mb-4 break-inside-avoid cursor-pointer transition-all hover:shadow-lg active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
                 selected.has(photo.id) ? "ring-2 ring-primary" : ""
               }`}
               onClick={() => toggleSelect(photo.id)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  toggleSelect(photo.id);
+                }
+              }}
             >
               <CardContent className="p-0">
                 <div className="relative aspect-square">
                   <Image
                     src={photo.url}
-                    alt={photo.name}
+                    alt={`Photo: ${photo.name}`}
                     fill
+                    sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
                     className="object-cover rounded-t-lg"
+                    loading={index < 4 ? "eager" : "lazy"}
+                    priority={index < 4}
+                    quality={85}
                   />
-                  <div className="absolute top-2 left-2">
+                  <div className="absolute top-2 sm:top-3 left-2 sm:left-3">
                     <Checkbox
                       checked={selected.has(photo.id)}
                       onCheckedChange={() => toggleSelect(photo.id)}
                       onClick={(e) => e.stopPropagation()}
-                      className="bg-background/80 backdrop-blur-sm"
+                      aria-label={`Select ${photo.name}`}
+                      className="bg-background/80 backdrop-blur-sm h-6 w-6 sm:h-5 sm:w-5 border-2"
                     />
                   </div>
-                  <div className="absolute top-2 right-2">
+                  <div className="absolute top-2 sm:top-3 right-2 sm:right-3">
                     <Badge
                       variant={
                         photo.status === "done" ? "success" : "destructive"
                       }
+                      className="text-xs px-2 py-1"
                     >
                       {photo.status === "done" ? (
                         <CheckCircle2 className="h-3 w-3 mr-1" />
                       ) : (
                         <XCircle className="h-3 w-3 mr-1" />
                       )}
-                      {photo.status}
+                      <span className="hidden sm:inline">{photo.status}</span>
                     </Badge>
                   </div>
                 </div>
-                <div className="p-3">
-                  <p className="text-sm font-medium truncate">{photo.name}</p>
-                  <p className="text-xs text-muted-foreground mt-1">
+                <div className="p-3 sm:p-4">
+                  <p className="text-sm sm:text-base font-medium truncate">{photo.name}</p>
+                  <p className="text-xs sm:text-sm text-muted-foreground mt-1">
                     {new Date(photo.processed_at || photo.uploaded_at).toLocaleDateString()}
                   </p>
                 </div>
@@ -237,6 +276,9 @@ export default function GalleryPage() {
             </Card>
           ))}
         </div>
+      </main>
+      <div aria-live="polite" aria-atomic="true" className="sr-only">
+        {selected.size > 0 && `${selected.size} photo${selected.size !== 1 ? "s" : ""} selected`}
       </div>
     </div>
   );

@@ -61,6 +61,7 @@ export default function UploadPage() {
           toast({
             title: "Upload successful",
             description: `${file.name} has been uploaded and queued for processing.`,
+            variant: "success",
           });
           setTimeout(() => {
             setFiles((prev) => prev.filter((f) => f.id !== id));
@@ -134,13 +135,16 @@ export default function UploadPage() {
 
   return (
     <div className="min-h-screen bg-background">
+      <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:rounded-md">
+        Skip to main content
+      </a>
       <Nav />
-      <div className="container mx-auto px-4 py-12">
+      <main id="main-content" className="container mx-auto px-4 sm:px-6 py-6 sm:py-12">
         <div className="max-w-4xl mx-auto">
-          <div className="text-center mb-8">
-            <h1 className="text-4xl font-bold mb-2">Upload Photos</h1>
-            <p className="text-muted-foreground">
-              Drag and drop your images or click to browse
+          <div className="text-center mb-6 sm:mb-8">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-2">Upload Photos</h1>
+            <p className="text-sm sm:text-base text-muted-foreground">
+              Drag and drop your images or tap to browse
             </p>
           </div>
 
@@ -157,17 +161,17 @@ export default function UploadPage() {
             onDragLeave={() => setIsDragging(false)}
             onDrop={handleDrop}
           >
-            <CardContent className="p-12">
-              <div className="flex flex-col items-center justify-center gap-4">
-                <div className="rounded-full bg-primary/10 p-6">
-                  <Upload className="h-12 w-12 text-primary" />
+            <CardContent className="p-6 sm:p-8 md:p-12">
+              <div className="flex flex-col items-center justify-center gap-4 sm:gap-6">
+                <div className="rounded-full bg-primary/10 p-4 sm:p-6">
+                  <Upload className="h-8 w-8 sm:h-12 sm:w-12 text-primary" />
                 </div>
                 <div className="text-center">
-                  <p className="text-lg font-semibold mb-2">
+                  <p className="text-base sm:text-lg font-semibold mb-2">
                     Drop your photos here
                   </p>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    or click to browse
+                  <p className="text-xs sm:text-sm text-muted-foreground mb-4 sm:mb-6">
+                    or tap to browse
                   </p>
                   <input
                     type="file"
@@ -176,9 +180,15 @@ export default function UploadPage() {
                     onChange={handleFileInput}
                     className="hidden"
                     id="file-upload"
+                    aria-label="Select image files to upload"
                   />
-                  <Button asChild>
-                    <label htmlFor="file-upload" className="cursor-pointer">
+                  <Button asChild size="lg" className="min-h-[44px] px-6">
+                    <label htmlFor="file-upload" className="cursor-pointer" role="button" tabIndex={0} onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        document.getElementById("file-upload")?.click();
+                      }
+                    }}>
                       Select Files
                     </label>
                   </Button>
@@ -188,34 +198,36 @@ export default function UploadPage() {
           </Card>
 
           {files.length > 0 && (
-            <div className="mt-8 space-y-4">
-              <h2 className="text-xl font-semibold">Uploading Files</h2>
+            <div className="mt-6 sm:mt-8 space-y-3 sm:space-y-4">
+              <h2 className="text-lg sm:text-xl font-semibold">Uploading Files</h2>
               {files.map((uploadFile) => (
                 <Card key={uploadFile.id}>
-                  <CardContent className="p-4">
-                    <div className="flex items-center gap-4">
+                  <CardContent className="p-4 sm:p-6">
+                    <div className="flex items-center gap-3 sm:gap-4">
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between mb-2">
-                          <p className="text-sm font-medium truncate">
+                        <div className="flex items-center justify-between mb-2 gap-2">
+                          <p className="text-sm sm:text-base font-medium truncate">
                             {uploadFile.file.name}
                           </p>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-shrink-0">
                             {uploadFile.status === "success" && (
-                              <CheckCircle2 className="h-5 w-5 text-green-500" />
+                              <CheckCircle2 className="h-5 w-5 sm:h-6 sm:w-6 text-success" />
                             )}
                             {uploadFile.status === "error" && (
                               <Button
                                 variant="ghost"
                                 size="icon"
+                                className="min-h-[44px] min-w-[44px]"
                                 onClick={() => removeFile(uploadFile.id)}
+                                aria-label={`Remove ${uploadFile.file.name} from upload queue`}
                               >
-                                <X className="h-4 w-4" />
+                                <X className="h-5 w-5" aria-hidden="true" />
                               </Button>
                             )}
                           </div>
                         </div>
-                        <Progress value={uploadFile.progress} className="h-2" />
-                        <p className="text-xs text-muted-foreground mt-1">
+                        <Progress value={uploadFile.progress} className="h-2 sm:h-2.5" />
+                        <p className="text-xs sm:text-sm text-muted-foreground mt-2">
                           {uploadFile.progress}% •{" "}
                           {uploadFile.status === "uploading"
                             ? "Uploading..."
@@ -231,6 +243,9 @@ export default function UploadPage() {
             </div>
           )}
         </div>
+      </main>
+      <div aria-live="polite" aria-atomic="true" className="sr-only">
+        {files.length > 0 && `${files.length} file${files.length !== 1 ? "s" : ""} uploading`}
       </div>
     </div>
   );
