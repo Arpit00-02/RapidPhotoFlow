@@ -66,3 +66,12 @@
   }
 }
 
+/* Force 4 columns on large screens for gallery - ensures consistent layout */
+@media (min-width: 1024px) {
+  .gallery-grid {
+    display: grid !important;
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    gap: 1rem;
+  }
+}
+

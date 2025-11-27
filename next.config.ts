@@ -18,8 +18,6 @@ const nextConfig: NextConfig = {
   compress: true,
   poweredByHeader: false,
   reactStrictMode: true,
-  // Performance optimizations
-  swcMinify: true,
   // Headers for performance
   async headers() {
     return [

@@ -53,6 +53,31 @@ export async function GET(request: NextRequest) {
               await processStep(photo.id);
             }
           }
+          
+          // Check for failed photos that can be retried (processing failures, not upload failures)
+          // Failed photos with a URL means upload succeeded but processing failed
+          const { prisma } = await import("@/lib/prisma");
+          const { getPhoto, updatePhoto } = await import("@/lib/db");
+          const failedPhotos = await prisma.photo.findMany({
+            where: {
+              status: "failed",
+              url: { not: "" }, // Has URL means upload succeeded
+            },
+          });
+          
+          for (const photo of failedPhotos) {
+            const photoData = await getPhoto(photo.id);
+            const retryCount = (photoData as any)?.retry_count || 0;
+            if (retryCount < 3) {
+              // Retry processing by setting status back to queued
+              await updatePhoto(photo.id, {
+                status: "queued",
+                progress: 0,
+                error: null,
+              });
+              startProcessing(photo.id);
+            }
+          }
 
           // Get updated photos
           const updatedPhotos = await getProcessingPhotos();

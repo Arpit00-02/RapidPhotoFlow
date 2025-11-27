@@ -13,8 +13,9 @@ interface UploadFile {
   file: File;
   id: string;
   progress: number;
-  status: "uploading" | "success" | "error";
+  status: "uploading" | "success" | "error" | "retrying";
   error?: string;
+  retryCount: number;
 }
 
 export default function UploadPage() {
@@ -23,21 +24,15 @@ export default function UploadPage() {
   const [files, setFiles] = useState<UploadFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
 
-  const uploadFile = useCallback(async (file: File) => {
-    const id = Math.random().toString(36).substring(7);
-    const uploadFile: UploadFile = {
-      file,
-      id,
-      progress: 0,
-      status: "uploading",
-    };
+  const performUpload = useCallback((file: File, id: string, retryCount: number, photoId?: string): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      // Always send photoId if we have it (for retries)
+      if (photoId) {
+        formData.append("photoId", photoId);
+      }
 
-    setFiles((prev) => [...prev, uploadFile]);
-
-    const formData = new FormData();
-    formData.append("file", file);
-
-    try {
       const xhr = new XMLHttpRequest();
 
       xhr.upload.addEventListener("progress", (e) => {
@@ -67,43 +62,134 @@ export default function UploadPage() {
             setFiles((prev) => prev.filter((f) => f.id !== id));
             router.push("/processing");
           }, 1500);
+          resolve();
         } else {
-          throw new Error("Upload failed");
+          try {
+            const response = JSON.parse(xhr.responseText);
+            if (response.error === "Max retries exceeded" || response.canRetry === false) {
+              reject({ message: "Max retries exceeded", response });
+            } else {
+              // Pass the response so we can get the photoId and retryCount
+              reject({ message: response.error || response.details || "Upload failed", response });
+            }
+          } catch (parseError) {
+            // If JSON parsing fails, still try to pass what we can
+            reject({ message: "Upload failed", response: { error: xhr.responseText } });
+          }
         }
       });
 
       xhr.addEventListener("error", () => {
+        reject({ message: "Network error", response: null });
+      });
+
+      xhr.addEventListener("abort", () => {
+        reject({ message: "Upload aborted", response: null });
+      });
+
+      xhr.open("POST", "/api/upload");
+      xhr.send(formData);
+    });
+  }, [router, toast]);
+
+  const uploadFile = useCallback(async (file: File, retryCount = 0, photoId?: string) => {
+    const id = photoId || Math.random().toString(36).substring(7);
+    const uploadFileData: UploadFile = {
+      file,
+      id,
+      progress: 0,
+      status: retryCount > 0 ? "retrying" : "uploading",
+      retryCount,
+    };
+
+    setFiles((prev) => {
+      // If retrying, update existing file instead of adding new one
+      const existingIndex = prev.findIndex((f) => f.id === id);
+      if (existingIndex >= 0 && retryCount > 0) {
+        const updated = [...prev];
+        updated[existingIndex] = { ...uploadFileData, id: prev[existingIndex].id };
+        return updated;
+      }
+      // Only add if it doesn't exist
+      if (existingIndex < 0) {
+        return [...prev, uploadFileData];
+      }
+      return prev;
+    });
+
+    try {
+      await performUpload(file, id, retryCount, photoId || id);
+    } catch (error) {
+      const maxRetries = 3;
+      let errorMessage = "Unknown error";
+      let errorResponse: any = null;
+      
+      // Extract error message and response
+      if (typeof error === "object" && error !== null) {
+        errorMessage = (error as any).message || "Unknown error";
+        errorResponse = (error as any).response;
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      
+      // Get photoId and retryCount from error response if available
+      const responsePhotoId = errorResponse?.id || photoId || id;
+      const responseRetryCount = errorResponse?.retryCount ?? retryCount;
+      
+      // Check if max retries exceeded
+      if (errorMessage === "Max retries exceeded" || errorResponse?.canRetry === false) {
         setFiles((prev) =>
           prev.map((f) =>
             f.id === id
-              ? { ...f, status: "error", error: "Upload failed" }
+              ? { ...f, status: "error", error: "Upload failed after multiple attempts. This file will not be retried automatically.", retryCount: maxRetries }
               : f
           )
         );
         toast({
           title: "Upload failed",
-          description: `Failed to upload ${file.name}. Please try again.`,
+          description: `Failed to upload ${file.name} after ${maxRetries} attempts. This file will not be retried automatically.`,
           variant: "destructive",
         });
-      });
+        return;
+      }
 
-      xhr.open("POST", "/api/upload");
-      xhr.send(formData);
-    } catch (error) {
-      setFiles((prev) =>
-        prev.map((f) =>
-          f.id === id
-            ? { ...f, status: "error", error: "Upload failed" }
-            : f
-        )
-      );
-      toast({
-        title: "Upload failed",
-        description: `Failed to upload ${file.name}. Please try again.`,
-        variant: "destructive",
-      });
+      // The backend already increments retry_count, so use the value from response
+      // If not available, increment the current retry count
+      const newRetryCount = errorResponse?.retryCount !== undefined 
+        ? errorResponse.retryCount 
+        : retryCount + 1;
+
+      if (newRetryCount < maxRetries && errorResponse?.canRetry !== false) {
+        // Retry after a delay
+        setFiles((prev) =>
+          prev.map((f) =>
+            f.id === id
+              ? { ...f, status: "retrying", error: `Retrying... (${newRetryCount}/${maxRetries})`, retryCount: newRetryCount }
+              : f
+          )
+        );
+        
+        // Wait 2 seconds before retrying
+        setTimeout(() => {
+          uploadFile(file, newRetryCount, responsePhotoId);
+        }, 2000);
+      } else {
+        // Max retries reached, mark as error
+        setFiles((prev) =>
+          prev.map((f) =>
+            f.id === id
+              ? { ...f, status: "error", error: "Upload failed after multiple attempts. This file will not be retried automatically.", retryCount: newRetryCount }
+              : f
+          )
+        );
+        toast({
+          title: "Upload failed",
+          description: `Failed to upload ${file.name} after ${maxRetries} attempts. This file will not be retried automatically.`,
+          variant: "destructive",
+        });
+      }
     }
-  }, [router, toast]);
+  }, [performUpload, toast]);
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
@@ -231,6 +317,8 @@ export default function UploadPage() {
                           {uploadFile.progress}% •{" "}
                           {uploadFile.status === "uploading"
                             ? "Uploading..."
+                            : uploadFile.status === "retrying"
+                            ? uploadFile.error || "Retrying..."
                             : uploadFile.status === "success"
                             ? "Uploaded successfully"
                             : uploadFile.error}

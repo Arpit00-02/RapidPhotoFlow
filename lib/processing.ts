@@ -69,14 +69,39 @@ export async function processStep(photoId: string): Promise<boolean> {
   if (willFail && progress > 30 && progress < 70) {
     // Random failure between 30-70%
     processingState.delete(photoId);
-    addLog("Processing failed: Unexpected error occurred");
-    await updatePhoto(photoId, {
-      status: "failed",
-      progress: progress,
-      error: "Processing failed: Unexpected error occurred",
-      logs: logEvents,
-    });
-    return false;
+    
+    // Get current retry count from database
+    const photo = await getPhoto(photoId);
+    const currentRetryCount = (photo as any)?.retry_count || 0;
+    const MAX_PROCESSING_RETRIES = 3;
+    const newRetryCount = currentRetryCount + 1;
+    
+    addLog(`Processing failed: Unexpected error occurred (Attempt ${newRetryCount}/${MAX_PROCESSING_RETRIES})`);
+    
+    if (newRetryCount < MAX_PROCESSING_RETRIES) {
+      // Can retry - set status to queued and reset progress
+      await updatePhoto(photoId, {
+        status: "queued",
+        progress: 0,
+        error: null,
+        logs: logEvents,
+        retry_count: newRetryCount,
+      });
+      addLog("Retrying processing...");
+      // Restart processing
+      startProcessing(photoId);
+      return true; // Continue processing
+    } else {
+      // Max retries reached
+      await updatePhoto(photoId, {
+        status: "failed",
+        progress: progress,
+        error: "Processing failed after multiple attempts",
+        logs: logEvents,
+        retry_count: newRetryCount,
+      });
+      return false;
+    }
   }
 
   if (progress < 20) {

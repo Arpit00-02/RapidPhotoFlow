@@ -20,6 +20,7 @@ model Photo {
   processed_at DateTime?
   error       String?
   logs        Json     @default("[]")
+  retry_count Int      @default(0)
 
   @@map("photos")
 }

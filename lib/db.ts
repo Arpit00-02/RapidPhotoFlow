@@ -128,6 +128,8 @@ export async function updatePhoto(
     processed_at: string | null;
     error: string | null;
     logs: Array<{ timestamp: string; message: string }>;
+    retry_count: number;
+    url: string;
   }>
 ): Promise<void> {
   const data: any = {};
@@ -147,11 +149,41 @@ export async function updatePhoto(
   if (updates.logs !== undefined) {
     data.logs = updates.logs;
   }
+  if (updates.retry_count !== undefined) {
+    data.retry_count = updates.retry_count;
+  }
+  if (updates.url !== undefined) {
+    data.url = updates.url;
+  }
   
   await prisma.photo.update({
     where: { id },
     data,
   });
+}
+
+export async function getFailedPhotos(): Promise<Photo[]> {
+  const photos = await prisma.photo.findMany({
+    where: {
+      status: "failed",
+      retry_count: {
+        lt: 3, // Only get photos that haven't exceeded max retries
+      },
+    } as any,
+    orderBy: { uploaded_at: "asc" },
+  });
+  
+  return photos.map((photo) => ({
+    id: photo.id,
+    name: photo.name,
+    url: photo.url,
+    status: photo.status as Photo["status"],
+    progress: photo.progress,
+    uploaded_at: photo.uploaded_at.toISOString(),
+    processed_at: photo.processed_at?.toISOString() || null,
+    error: photo.error,
+    logs: (photo.logs as any) || [],
+  }));
 }
 
 export async function deletePhotos(ids: string[]): Promise<void> {
