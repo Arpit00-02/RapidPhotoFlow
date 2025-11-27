@@ -210,7 +210,7 @@ export default function GalleryPage() {
           )}
         </div>
 
-        <div className="columns-1 sm:columns-2 md:columns-3 lg:columns-4 gap-3 sm:gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 gallery-grid">
           {photos.map((photo, index) => (
             <Card
               key={photo.id}
@@ -218,7 +218,7 @@ export default function GalleryPage() {
               tabIndex={0}
               aria-label={`Select photo ${photo.name}`}
               aria-pressed={selected.has(photo.id)}
-              className={`mb-3 sm:mb-4 break-inside-avoid cursor-pointer transition-all hover:shadow-lg active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
+              className={`cursor-pointer transition-all hover:shadow-lg active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
                 selected.has(photo.id) ? "ring-2 ring-primary" : ""
               }`}
               onClick={() => toggleSelect(photo.id)}
